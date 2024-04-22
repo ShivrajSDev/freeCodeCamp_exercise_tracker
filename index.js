@@ -8,37 +8,26 @@ let mongoose = require('mongoose');
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
 let User;
-let Exercise;
 
 let userSchema = mongoose.Schema({
   username: {
     type: String,
     required: true
-  }
-});
-
-let exerciseSchema = mongoose.Schema({
-  _id: {
-    type: mongoose.Types.ObjectId,
-    required: true
   },
-  username: {
-    type: String,
-    required: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
-  duration: {
-    type: Number,
-    required: true
-  },
-  date: Date
+  logs: [{
+    description: {
+      type: String,
+      required: true
+    },
+    duration: {
+      type: Number,
+      required: true
+    },
+    date: Date
+  }]
 });
 
 User = mongoose.model('User', userSchema);
-Exercise = mongoose.model('Exercise', exerciseSchema);
 
 app.use(cors());
 app.use(bodyParser.urlencoded({extended:false}));
@@ -65,7 +54,37 @@ app.post('/api/users', function(req, res) {
 });
 
 app.post('/api/users/:_id/exercises', function(req, res) {
-  res.json({post: "exercise"});
+  User.findOne({ _id: req.params._id}, function(err1, user) {
+    if(err1) {
+      res.json({error: err1});
+    } else {
+      if (user) {
+        let newExercise = {
+          description: req.body.description,
+          duration: req.body.duration,
+          date: req.body.date ? new Date(req.body.date) : new Date(),
+        };
+        
+        user.logs.push(newExercise);
+        user.save(function(err2, data){
+          if(err2) {
+            res.json({error: err2});
+          } else {
+            let savedExercise = data.logs.pop();
+            res.json({
+              username: data.username,
+              description: savedExercise.description,
+              duration: savedExercise.duration,
+              date: savedExercise.date.toDateString(),
+              _id: data._id
+            });
+          }
+        });
+      } else {
+        res.json({error: "No user found found for the given id"});
+      }
+    }
+  });
 });
 
 app.get('/api/users', function(req, res) {
