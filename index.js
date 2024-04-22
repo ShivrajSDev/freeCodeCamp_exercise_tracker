@@ -88,7 +88,15 @@ app.post('/api/users/:_id/exercises', function(req, res) {
 });
 
 app.get('/api/users', function(req, res) {
-  res.json({get: "users"});
+  User.find()
+    .select({logs: false})
+    .exec(function(err, data) {
+      if(err) {
+        res.json({error: err});
+      } else {
+        res.json(data);
+      }
+    });
 });
 
 app.get('/api/users/:_id/logs', function(req, res) {
