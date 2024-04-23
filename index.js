@@ -7,27 +7,34 @@ require('dotenv').config();
 let mongoose = require('mongoose');
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
+const MIN_DATE = -8640000000000000;
+const MAX_DATE = 8640000000000000;
+
 let User;
+let Log;
+
+let logSchema = mongoose.Schema({
+  description: {
+    type: String,
+    required: true
+  },
+  duration: {
+    type: Number,
+    required: true
+  },
+  date: Date
+});
 
 let userSchema = mongoose.Schema({
   username: {
     type: String,
     required: true
   },
-  logs: [{
-    description: {
-      type: String,
-      required: true
-    },
-    duration: {
-      type: Number,
-      required: true
-    },
-    date: Date
-  }]
+  log: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Log' }]
 });
 
 User = mongoose.model('User', userSchema);
+Log = mongoose.model('Log', logSchema);
 
 app.use(cors());
 app.use(bodyParser.urlencoded({extended:false}));
@@ -59,27 +66,32 @@ app.post('/api/users/:_id/exercises', function(req, res) {
       res.json({error: err1});
     } else {
       if (user) {
-        let newExercise = {
+        let newExerciseLog = Log({
           description: req.body.description,
           duration: req.body.duration,
           date: req.body.date ? new Date(req.body.date) : new Date(),
-        };
-        
-        user.logs.push(newExercise);
-        user.save(function(err2, data){
+        });
+
+        newExerciseLog.save(function(err2, savedLog) {
           if(err2) {
             res.json({error: err2});
           } else {
-            let savedExercise = data.logs.pop();
-            res.json({
-              username: data.username,
-              description: savedExercise.description,
-              duration: savedExercise.duration,
-              date: savedExercise.date.toDateString(),
-              _id: data._id
+            user.log.push(savedLog._id);
+            user.save(function(err2, data){
+              if(err2) {
+                res.json({error: err2});
+              } else {
+                res.json({
+                  username: data.username,
+                  description: savedLog.description,
+                  duration: savedLog.duration,
+                  date: savedLog.date.toDateString(),
+                  _id: data._id
+                });
+              }
             });
           }
-        });
+        })
       } else {
         res.json({error: "No user found found for the given id"});
       }
@@ -101,7 +113,42 @@ app.get('/api/users', function(req, res) {
 
 app.get('/api/users/:_id/logs', function(req, res) {
   let { from, to, limit } = req.query;
-  res.json({get: "logs", from: from, to: to, limit: limit});
+  
+  if(from === undefined || from.trim().length === 0 ) {
+    from = MIN_DATE;
+  }
+  if(to === undefined || to.trim().length === 0 ) {
+    to = MAX_DATE;
+  }
+  if(limit === undefined ) {
+    limit = null;
+  }
+
+  User.findOne({_id: req.params._id})
+    .populate({
+      path: "log", 
+      select: '-_id description duration date', 
+      match: { 'date': { $gte: new Date(from), $lte: new Date(to) }}, 
+      sort: { 'date': -1},
+      limit: limit
+    })
+    .exec(function(err1, user) {
+    if(err1) {
+      res.json({error: err1});
+    } else {
+      res.json({
+        username: user.username,
+        count: user.log.length,
+        _id: user._id,
+        log: user.log.map(item => {
+          return {
+            description: item.description,
+            duration: item.duration,
+            date: item.date.toDateString()
+        }})
+      });
+    }
+  });
 });
 
 const listener = app.listen(process.env.PORT || 3000, () => {
