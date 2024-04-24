@@ -175,7 +175,7 @@ app.post('/api/users/:_id/exercises', function(req, res) {
 
 app.get('/api/users', function(req, res) {
   User.find()
-    .select({logs: false})
+    .select({_id: true, username: true, __v: true})
     .exec(function(err, data) {
       if(err) {
         res.json({error: err});
